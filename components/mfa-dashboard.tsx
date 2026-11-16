@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { Analise, Indicador } from '@/lib/types'
 import { scenarioTone } from '@/lib/scenario'
+import { ThemeSwitcher } from '@/components/theme-switcher'
+import { AiQuestionCard, MacroCharts, ScenarioSimulator } from '@/components/mfa-extras'
 
 const dash = '—'
 const number = (value?: number | null, digits = 2) => value == null || !Number.isFinite(value) ? dash : new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(value)
@@ -12,6 +14,11 @@ const date = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? dash : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(parsed)
 }
 const safeText = (value?: string | null) => value || dash
+const month = (value?: string | null) => {
+  if (!value) return dash
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? dash : new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(parsed)
+}
 
 function Panel({ title, eyebrow, children, className = '' }: { title: string; eyebrow?: string; children: React.ReactNode; className?: string }) {
   return <section className={`panel ${className}`}><div className="panel-heading">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2>{title}</h2></div>{children}</section>
@@ -70,8 +77,8 @@ function IbcbrCard({ data }: { data: Analise }) {
   const [open, setOpen] = useState(false)
   const ibc = data.indicadores?.ibcbr, recent = ibc?.janela_recente, previous = ibc?.janela_anterior
   const change = recent?.media == null || previous?.media == null ? null : recent.media - previous.media
-  const months = (value?: string[] | null) => value?.length ? value.join(' · ') : dash
-  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher −' : 'Ver janelas +'}</span></button>{open && <div className="ibc-content"><div><span>Janela anterior · {months(previous?.meses)}</span><strong>{number(previous?.media, 4)}</strong></div><div><span>Janela recente · {months(recent?.meses)}</span><strong>{number(recent?.media, 4)}</strong></div><div className="ibc-change"><span>Variação entre médias</span><strong>{change == null ? dash : number(change, 4)}</strong></div></div>}</section>
+  const points = [...(previous?.pontos ?? []), ...(recent?.pontos ?? [])].filter((point) => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((left, right) => (left.data ?? '').localeCompare(right.data ?? ''))
+  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher −' : 'Ver meses +'}</span></button>{open && <div className="ibc-content ibc-table-wrap"><table className="ibc-table"><thead><tr><th>Mês</th><th>Valor</th><th>Janela</th></tr></thead><tbody>{points.length ? points.map((point) => { const isRecent = recent?.pontos?.some((item) => item.data === point.data); return <tr key={point.data}><td>{month(point.data)}</td><td>{number(point.valor, 4)}</td><td>{isRecent ? 'Recente' : 'Anterior'}</td></tr> }) : <tr><td colSpan={3}>{dash}</td></tr>}</tbody></table><div className="ibc-summary"><div><span>Média da janela anterior</span><strong>{number(previous?.media, 4)}</strong></div><div><span>Média da janela recente</span><strong>{number(recent?.media, 4)}</strong></div><div className="ibc-change"><span>Variação entre médias</span><strong>{change == null ? dash : number(change, 4)}</strong></div></div></div>}</section>
 }
 
 function QualityWarnings({ data }: { data: Analise }) {
@@ -81,12 +88,14 @@ function QualityWarnings({ data }: { data: Analise }) {
 
 export function MfaDashboard({ data }: { data: Analise }) {
   return <main className="dashboard-shell"><div className="topline"><div className="brand-mark" aria-hidden="true">M</div><span>MACRO · BRASIL</span><span className="topline-rule" /></div>
-    <header className="page-header"><div><p className="eyebrow">PAINEL DE LEITURA</p><h1>MFA <span>—</span> AI Macro Fund Allocator</h1><p className="generated">Gerado em {date(data.gerado_em)}</p></div><span className="sample-pill">Dados de exemplo</span></header>
-    <div className="fixed-warning" role="note"><span className="warning-icon">!</span><span>{safeText(data.aviso)}</span></div>
+    <header className="page-header"><div><p className="eyebrow">PAINEL DE LEITURA</p><h1>MFA <span>—</span> AI Macro Fund Allocator</h1><p className="generated">Gerado em {date(data.gerado_em)}</p></div><div className="header-actions"><span className="sample-pill">Dados de exemplo</span><ThemeSwitcher /></div></header>
     <Summary data={data} />
-    <div className="two-column"><Scenario data={data} /><WhatChanges data={data} /></div>
+    <Scenario data={data} />
+    <MacroCharts data={data} />
+    <WhatChanges data={data} />
+    <ScenarioSimulator data={data} />
     <div className="two-column lower-grid"><Portfolio data={data} /><RealInterest data={data} /></div>
-    <Indicators data={data} /><IbcbrCard data={data} /><QualityWarnings data={data} />
-    <footer className="page-footer"><span>Fontes: BCB SGS · BCB Olinda/Focus</span><span>Dados do Banco Central do Brasil (licença ODbL)</span><span>MFA · protótipo educacional</span></footer>
+    <Indicators data={data} /><IbcbrCard data={data} /><QualityWarnings data={data} /><AiQuestionCard />
+    <footer className="page-footer"><span>{safeText(data.aviso)}</span><span>Fontes: BCB SGS · BCB Olinda/Focus</span><span>Dados do Banco Central do Brasil (licença ODbL)</span><span>MFA · protótipo educacional</span></footer>
   </main>
 }
