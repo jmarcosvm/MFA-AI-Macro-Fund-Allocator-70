@@ -3,15 +3,19 @@
 import { useState } from 'react'
 import type { Analise, Indicador } from '@/lib/types'
 import { scenarioTone } from '@/lib/scenario'
+import { formatarDataBR, formatarMesAnoBR } from '@/lib/datas'
+import { modoExemplo } from '@/lib/api'
+import { ThemeSwitcher } from '@/components/theme-switcher'
+import { AssetDot } from '@/components/asset-dot'
+import { AiQuestionCard, MacroCharts, ScenarioSimulator } from '@/components/mfa-extras'
 
 const dash = '—'
 const number = (value?: number | null, digits = 2) => value == null || !Number.isFinite(value) ? dash : new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(value)
-const date = (value?: string | null) => {
-  if (!value) return dash
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? dash : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(parsed)
-}
+const ibcTableFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const ibcTableNumber = (value?: number | null) => value == null || !Number.isFinite(value) ? dash : ibcTableFormatter.format(value)
+const date = (value?: string | null) => formatarDataBR(value) ?? dash
 const safeText = (value?: string | null) => value || dash
+const month = (value?: string | null) => formatarMesAnoBR(value) ?? dash
 
 function Panel({ title, eyebrow, children, className = '' }: { title: string; eyebrow?: string; children: React.ReactNode; className?: string }) {
   return <section className={`panel ${className}`}><div className="panel-heading">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2>{title}</h2></div>{children}</section>
@@ -21,22 +25,14 @@ function IndicatorCard({ title, data, suffix = '%', dateLabel = 'Data' }: { titl
   return <article className="metric-card"><span className="metric-label">{title}</span><strong>{data?.valor == null ? dash : `${number(data.valor, 4)}${suffix}`}</strong><span className="metric-meta">{dateLabel} · {date(data?.data)}</span><span className="metric-source">{safeText(data?.fonte)}</span></article>
 }
 
-function Summary({ data }: { data: Analise }) {
-  const origem = data.justificativa?.origem === 'llm' ? `IA · ${safeText(data.justificativa?.provedor)}` : data.justificativa?.origem === 'fallback' ? 'Texto automático (sem IA)' : dash
-  return <Panel title="Leitura do cenário" eyebrow="RESUMO" className="summary-panel"><p className="summary-text">{safeText(data.justificativa?.resumo)}</p><div className="summary-foot"><span className="origin-chip">{origem}</span><span className="sample-label">Dados de exemplo</span></div></Panel>
-}
-
-function Scenario({ data }: { data: Analise }) {
+function Hero({ data }: { data: Analise }) {
   const c = data.cenario?.criterios
-  const growthGap = c?.crescimento_ibcbr_pct == null || c.limiar_crescimento_pct == null ? null : c.crescimento_ibcbr_pct - c.limiar_crescimento_pct
-  const ipcaGap = c?.ipca_12m_pct == null || c.limiar_ipca_pct == null ? null : c.ipca_12m_pct - c.limiar_ipca_pct
-  return <Panel title="Cenário macroeconômico" eyebrow="CLASSIFICAÇÃO" className="scenario-panel">
-    <div className={`scenario-badge ${scenarioTone(data.cenario?.classificacao)}`}>{safeText(data.cenario?.classificacao)}</div>
-    <div className="criteria-grid">
-      <div className="criterion"><span>Crescimento do IBC-Br</span><strong>{c?.crescimento_ibcbr_pct == null ? dash : `${number(c.crescimento_ibcbr_pct)}%`} <small>vs. {c?.limiar_crescimento_pct == null ? dash : `${number(c.limiar_crescimento_pct)}%`}</small></strong><span className="distance">Distância ao limiar: {growthGap == null ? dash : `${number(growthGap)} p.p.`}</span></div>
-      <div className="criterion"><span>IPCA em 12 meses</span><strong>{c?.ipca_12m_pct == null ? dash : `${number(c.ipca_12m_pct)}%`} <small>vs. {c?.limiar_ipca_pct == null ? dash : `${number(c.limiar_ipca_pct)}%`}</small></strong><span className="distance">Distância ao limiar: {ipcaGap == null ? dash : `${number(ipcaGap)} p.p.`}</span></div>
-    </div>
-  </Panel>
+  const origem = data.justificativa?.origem === 'llm' ? `IA · ${safeText(data.justificativa?.provedor)}` : 'Texto automático'
+  const criteria = [
+    { label: 'Crescimento do IBC-Br', value: c?.crescimento_ibcbr_pct, limit: c?.limiar_crescimento_pct },
+    { label: 'IPCA em 12 meses', value: c?.ipca_12m_pct, limit: c?.limiar_ipca_pct },
+  ]
+  return <section className="hero-band"><div className="hero-reading"><span className={`hero-scenario ${scenarioTone(data.cenario?.classificacao)}`}>{safeText(data.cenario?.classificacao)}</span><p className="summary-text">{safeText(data.justificativa?.resumo)}</p><span className="origin-chip">{origem}</span></div><div className="hero-criteria">{criteria.map((item) => { const gap = item.value == null || item.limit == null ? null : item.value - item.limit; const width = gap == null ? 0 : Math.max(4, Math.min(100, Math.abs(gap) * 20)); return <div className="hero-criterion" key={item.label}><span>{item.label} <span className="muted-copy">vs. limiar {number(item.limit)}%</span></span><strong>{item.value == null ? dash : `${number(item.value)}%`}</strong><div className="threshold-track"><i style={{ width: `${width}%` }} /></div><small>Distância ao limiar: {gap == null ? dash : `${number(gap)} p.p.`}</small></div> })}</div></section>
 }
 
 function WhatChanges({ data }: { data: Analise }) {
@@ -46,13 +42,15 @@ function WhatChanges({ data }: { data: Analise }) {
 
 const allocationKeys = ['renda_fixa', 'fundos_cambiais', 'renda_variavel'] as const
 const allocationLabels: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'Renda fixa', fundos_cambiais: 'Fundos cambiais', renda_variavel: 'Renda variável' }
+const allocationColors: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'var(--series-blue, #1D4ED8)', fundos_cambiais: 'var(--chart-2)', renda_variavel: 'var(--chart-3)' }
 function Portfolio({ data }: { data: Analise }) {
   const portfolio = data.carteira
-  return <Panel title="Carteira-modelo" eyebrow="ALOCAÇÃO" className="portfolio-panel"><div className="allocation-legend"><span>Ativo</span><span>Base</span><span>Sugerida</span></div>
+  return <Panel title="Carteira-modelo" eyebrow="ALOCAÇÃO" className="portfolio-panel"><div className="allocation-legend"><span>Ativo</span><span>Base</span><span>Sugerida</span><span>Diferença</span></div>
     <div className="allocation-list">{allocationKeys.map((key, index) => {
       const base = portfolio?.base?.[key], proposed = portfolio?.sugerida?.[key]
       const tones = ['fixed', 'currency', 'equity']
-      return <div className="allocation-row" key={key}><span className="allocation-name"><i className={`legend-dot ${tones[index]}`} />{allocationLabels[key]}</span><div className="allocation-value"><div className="bar-track"><div className={`bar-fill ${tones[index]}`} style={{ width: `${Math.max(0, Math.min(100, (base ?? 0) * 100))}%` }} /></div><span>{base == null ? dash : `${number(base * 100, 1)}%`}</span></div><div className="allocation-value"><div className="bar-track"><div className={`bar-fill suggested ${tones[index]}`} style={{ width: `${Math.max(0, Math.min(100, (proposed ?? 0) * 100))}%` }} /></div><span>{proposed == null ? dash : `${number(proposed * 100, 1)}%`}</span></div></div>
+      const difference = base == null || proposed == null ? null : (proposed - base) * 100
+      return <div className="allocation-row" key={key}><span className="allocation-name"><AssetDot color={allocationColors[key]} />{allocationLabels[key]}</span><div className="allocation-value"><div className="bar-track"><div className={`bar-fill ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, base ?? 0)) } as React.CSSProperties} /></div><span>{base == null ? dash : `${number(base * 100, 1)}%`}</span></div><div className="allocation-value"><div className="bar-track"><div className={`bar-fill suggested ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, proposed ?? 0)) } as React.CSSProperties} /></div><span>{proposed == null ? dash : `${number(proposed * 100, 1)}%`}</span></div><span className="allocation-difference">{difference == null ? dash : `${difference > 0 ? '+' : ''}${number(difference, 0)} p.p.`}</span></div>
     })}</div><div className="portfolio-meta"><span>Limite de desvio <strong>{portfolio?.limite_desvio_pp == null ? dash : `${number(portfolio.limite_desvio_pp)} p.p.`}</strong></span><span>Preferência em renda fixa <strong>{safeText(portfolio?.renda_fixa_preferencia)}</strong></span></div><p className="didactic-note">O ajuste da carteira é uma ilustração didática.</p></Panel>
 }
 
@@ -70,8 +68,8 @@ function IbcbrCard({ data }: { data: Analise }) {
   const [open, setOpen] = useState(false)
   const ibc = data.indicadores?.ibcbr, recent = ibc?.janela_recente, previous = ibc?.janela_anterior
   const change = recent?.media == null || previous?.media == null ? null : recent.media - previous.media
-  const months = (value?: string[] | null) => value?.length ? value.join(' · ') : dash
-  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher −' : 'Ver janelas +'}</span></button>{open && <div className="ibc-content"><div><span>Janela anterior · {months(previous?.meses)}</span><strong>{number(previous?.media, 4)}</strong></div><div><span>Janela recente · {months(recent?.meses)}</span><strong>{number(recent?.media, 4)}</strong></div><div className="ibc-change"><span>Variação entre médias</span><strong>{change == null ? dash : number(change, 4)}</strong></div></div>}</section>
+  const points = [...(previous?.pontos ?? []), ...(recent?.pontos ?? [])].filter((point) => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((left, right) => (left.data ?? '').localeCompare(right.data ?? ''))
+  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher −' : 'Ver meses +'}</span></button>{open && <div className="ibc-content ibc-table-wrap"><table className="ibc-table"><thead><tr><th>Mês</th><th>Valor</th><th>Janela</th></tr></thead><tbody>{points.length ? points.map((point) => { const isRecent = recent?.pontos?.some((item) => item.data === point.data); return <tr key={point.data}><td>{month(point.data)}</td><td>{ibcTableNumber(point.valor)}</td><td>{isRecent ? 'Recente' : 'Anterior'}</td></tr> }) : <tr><td colSpan={3}>Sem dados</td></tr>}</tbody></table><div className="ibc-summary"><div><span>Média da janela anterior</span><strong>{number(previous?.media, 4)}</strong></div><div><span>Média da janela recente</span><strong>{number(recent?.media, 4)}</strong></div><div className="ibc-change"><span>Variação entre médias</span><strong>{change == null ? dash : number(change, 4)}</strong></div></div></div>}</section>
 }
 
 function QualityWarnings({ data }: { data: Analise }) {
@@ -81,12 +79,13 @@ function QualityWarnings({ data }: { data: Analise }) {
 
 export function MfaDashboard({ data }: { data: Analise }) {
   return <main className="dashboard-shell"><div className="topline"><div className="brand-mark" aria-hidden="true">M</div><span>MACRO · BRASIL</span><span className="topline-rule" /></div>
-    <header className="page-header"><div><p className="eyebrow">PAINEL DE LEITURA</p><h1>MFA <span>—</span> AI Macro Fund Allocator</h1><p className="generated">Gerado em {date(data.gerado_em)}</p></div><span className="sample-pill">Dados de exemplo</span></header>
-    <div className="fixed-warning" role="note"><span className="warning-icon">!</span><span>{safeText(data.aviso)}</span></div>
-    <Summary data={data} />
-    <div className="two-column"><Scenario data={data} /><WhatChanges data={data} /></div>
+    <header className="page-header"><div><p className="eyebrow">PAINEL DE LEITURA</p><h1>MFA <span>—</span> AI Macro Fund Allocator</h1><p className="generated">Gerado em {date(data.gerado_em)}</p></div><div className="header-actions">{modoExemplo() && <span className="sample-pill">Dados de exemplo</span>}<ThemeSwitcher /></div></header>
+    <Hero data={data} />
+    <MacroCharts data={data} />
+    <WhatChanges data={data} />
+    <ScenarioSimulator data={data} />
     <div className="two-column lower-grid"><Portfolio data={data} /><RealInterest data={data} /></div>
-    <Indicators data={data} /><IbcbrCard data={data} /><QualityWarnings data={data} />
-    <footer className="page-footer"><span>Fontes: BCB SGS · BCB Olinda/Focus</span><span>Dados do Banco Central do Brasil (licença ODbL)</span><span>MFA · protótipo educacional</span></footer>
+    <Indicators data={data} /><IbcbrCard data={data} /><QualityWarnings data={data} /><AiQuestionCard />
+    <footer className="page-footer"><span>{safeText(data.aviso)}</span><span>Fontes: BCB SGS · BCB Olinda/Focus</span><span>Dados do Banco Central do Brasil (licença ODbL)</span><span>MFA · protótipo educacional</span></footer>
   </main>
 }
