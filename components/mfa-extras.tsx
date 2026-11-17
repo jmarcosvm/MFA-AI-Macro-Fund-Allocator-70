@@ -20,11 +20,11 @@ const formatDate = (value?: string | number | null, withYear = false) => {
 const labels: Record<string, string> = {
   valor: 'Valor', anterior: 'Janela anterior', recente: 'Janela recente',
 }
-const chartConfig = {
-  valor: { label: 'Valor', color: 'var(--chart-1)' },
+const chartConfig = (seriesColor: string) => ({
+  valor: { label: 'Valor', color: seriesColor },
   anterior: { label: 'Janela anterior', color: 'var(--chart-2)' },
   recente: { label: 'Janela recente', color: 'var(--chart-3)' },
-} satisfies ChartConfig
+}) satisfies ChartConfig
 
 type ChartDataPoint = { data: string; valor: number; anterior?: number | null; recente?: number | null }
 function filterByPeriod(points: SeriePonto[] | null | undefined, period: PeriodoGrafico): ChartDataPoint[] {
@@ -38,7 +38,7 @@ function filterByPeriod(points: SeriePonto[] | null | undefined, period: Periodo
   return sorted.filter((point) => new Date(`${point.data}T00:00:00Z`) >= cutoff)
 }
 
-function ChartCard({ title, points, threshold, referenceLabel, previousWindow, recentWindow, ibcbr = false }: { title: string; points?: SeriePonto[] | null; threshold?: number | null; referenceLabel?: string; previousWindow?: SeriePonto[] | null; recentWindow?: SeriePonto[] | null; ibcbr?: boolean }) {
+function ChartCard({ title, points, threshold, referenceLabel, previousWindow, recentWindow, ibcbr = false, seriesColor = 'var(--chart-1)' }: { title: string; points?: SeriePonto[] | null; threshold?: number | null; referenceLabel?: string; previousWindow?: SeriePonto[] | null; recentWindow?: SeriePonto[] | null; ibcbr?: boolean; seriesColor?: string }) {
   const rows = useMemo(() => filterByPeriod(points, 'max'), [points])
   const previousDates = new Set(previousWindow?.map((point) => point.data).filter((point): point is string => Boolean(point)))
   const recentDates = new Set(recentWindow?.map((point) => point.data).filter((point): point is string => Boolean(point)))
@@ -50,17 +50,21 @@ function ChartCard({ title, points, threshold, referenceLabel, previousWindow, r
   const chartValues = data.map((point) => point.valor)
   const valueRange = chartValues.length ? Math.max(...chartValues) - Math.min(...chartValues) : 0
   const axisPadding = valueRange * CHART_AXIS_PADDING_RATIO || CHART_AXIS_ZERO_PADDING
+  const isSelic = title === 'Selic efetiva diária'
+  const yDomain: [number, number] = isSelic
+    ? [Math.round((Math.min(...chartValues) - 0.005) * 1000) / 1000, Math.round((Math.max(...chartValues) + 0.005) * 1000) / 1000]
+    : [Math.min(...chartValues) - axisPadding, Math.max(...chartValues) + axisPadding]
   const hasThreshold = threshold != null && Number.isFinite(threshold)
   return <article className="macro-chart-card"><div className="macro-chart-title"><h3>{title}</h3>{ibcbr && <div className="window-legend"><span><i className="window-dot previous" />Janela anterior</span><span><i className="window-dot recent" />Janela recente</span></div>}</div>
-    {!data.length ? <div className="chart-empty">Sem dados</div> : <ChartContainer config={chartConfig} className="macro-chart">
+    {!data.length ? <div className="chart-empty">Sem dados</div> : <ChartContainer config={chartConfig(seriesColor)} className="macro-chart">
       <LineChart data={data} accessibilityLayer margin={{ left: 2, right: 8, top: 10 }}>
-        <CartesianGrid vertical={false} strokeDasharray="3 4" />
-        <XAxis dataKey="data" tickLine={false} axisLine={false} minTickGap={24} tickFormatter={(value) => formatDate(value)} />
-        <YAxis width={48} tickLine={false} axisLine={false} domain={[Math.min(...chartValues) - axisPadding, Math.max(...chartValues) + axisPadding]} tickFormatter={(value) => formatValue(value)} />
+        <CartesianGrid vertical={false} stroke="var(--border)" strokeWidth={1} />
+        <XAxis dataKey="data" tickLine={false} axisLine={false} minTickGap={24} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} tickFormatter={(value) => formatDate(value)} />
+        <YAxis width={56} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} domain={yDomain} tickCount={isSelic ? 4 : undefined} tickFormatter={(value) => formatValue(value, isSelic ? 3 : 2)} />
         <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => formatDate(value, true)} formatter={(value, name) => <div className="chart-tooltip-value"><span>{labels[String(name)] ?? name}</span><strong>{formatValue(Number(value), 4)}</strong></div>} />} />
-        {hasThreshold && <ReferenceLine y={threshold} stroke="var(--chart-4)" strokeDasharray="4 4" label={{ value: `${referenceLabel ?? 'Referência'} ${formatValue(threshold)}%`, position: 'insideTopRight', fill: 'var(--muted-foreground)', fontSize: 10 }} />}
-        <Line dataKey="valor" name="valor" type="monotone" stroke="var(--color-valor)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-        {ibcbr && <><Line dataKey="anterior" name="anterior" type="monotone" stroke="var(--color-anterior)" strokeWidth={3} dot={{ r: 3 }} connectNulls /><Line dataKey="recente" name="recente" type="monotone" stroke="var(--color-recente)" strokeWidth={3} dot={{ r: 3 }} connectNulls /></>}
+        {hasThreshold && <ReferenceLine y={threshold} stroke="var(--chart-4)" strokeDasharray="4 4" label={{ value: `${referenceLabel ?? 'Referência'} ${formatValue(threshold)}%`, position: 'insideTopRight', fill: 'var(--chart-4)', fontSize: 12 }} />}
+        <Line dataKey="valor" name="valor" type="linear" stroke="var(--color-valor)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+        {ibcbr && <><Line dataKey="anterior" name="anterior" type="linear" stroke="var(--color-anterior)" strokeWidth={3} dot={{ r: 3 }} connectNulls /><Line dataKey="recente" name="recente" type="linear" stroke="var(--color-recente)" strokeWidth={3} dot={{ r: 3 }} connectNulls /></>}
       </LineChart>
     </ChartContainer>}
   </article>
@@ -81,7 +85,7 @@ export function MacroCharts({ data }: { data: Analise }) {
     return ordered.filter((point) => new Date(`${point.data}T00:00:00Z`) >= start)
   }
   return <section className="charts-section"><div className="section-heading chart-section-heading"><div><span className="eyebrow">SÉRIES HISTÓRICAS</span><h2>Dashboard interativo</h2></div><label className="period-control">Período<select aria-label="Período dos gráficos" value={period} onChange={(event) => setPeriod(event.target.value as PeriodoGrafico)}>{CHART_PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div>
-    <div className="macro-chart-grid">{MACRO_CHARTS.map((chart) => <ChartCard key={chart.id} title={chart.title} points={filteredById(chart.id)} ibcbr={chart.id === 'ibcbr_mensal'} previousWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_anterior?.pontos : null} recentWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_recente?.pontos : null} threshold={chart.id === 'ipca_12m_mensal' ? data.cenario?.criterios?.limiar_ipca_pct : chart.id === 'selic_efetiva_diaria' ? data.indicadores?.meta_selic_aa?.valor : null} referenceLabel={chart.id === 'selic_efetiva_diaria' ? 'Meta' : 'Limiar'} />)}</div>
+    <div className="macro-chart-grid">{MACRO_CHARTS.map((chart) => <ChartCard key={chart.id} title={chart.title} points={filteredById(chart.id)} ibcbr={chart.id === 'ibcbr_mensal'} previousWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_anterior?.pontos : null} recentWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_recente?.pontos : null} threshold={chart.id === 'ipca_12m_mensal' ? data.cenario?.criterios?.limiar_ipca_pct : chart.id === 'selic_efetiva_diaria' ? data.indicadores?.meta_selic_aa?.valor : null} referenceLabel={chart.id === 'selic_efetiva_diaria' ? 'Meta' : 'Limiar'} seriesColor={chart.id === 'ipca_12m_mensal' ? 'var(--chart-5)' : chart.id === 'selic_efetiva_diaria' ? 'var(--chart-2)' : chart.id === 'dolar_diario' ? 'var(--chart-3)' : 'var(--chart-1)'} />)}</div>
   </section>
 }
 
@@ -92,7 +96,7 @@ function AllocationBars({ values }: { values?: Record<string, number | null | un
   return <div className="simulation-allocations">{allocationKeys.map((key, index) => {
     const fraction = values?.[key]
     const percent = fraction == null || !Number.isFinite(fraction) ? null : Math.max(0, Math.min(100, fraction * 100))
-    return <div className="simulation-allocation" key={key}><span>{allocationNames[key]}</span><div className="bar-track"><div className={`bar-fill ${allocationTone[index]}`} style={{ width: `${percent ?? 0}%` }} /></div><strong>{fraction == null ? empty : `${formatValue(fraction * 100, 1)}%`}</strong></div>
+    return <div className="simulation-allocation" key={key}><span>{allocationNames[key]}</span><div className="bar-track"><div className={`bar-fill ${allocationTone[index]}`} style={{ '--bar-progress': (percent ?? 0) / 100 } as React.CSSProperties} /></div><strong>{fraction == null ? empty : `${formatValue(fraction * 100, 1)}%`}</strong></div>
   })}</div>
 }
 
