@@ -1,6 +1,9 @@
 import type { PeriodoGrafico, Tema } from './types'
 
-export const API_BASE_URL = 'https://mfa-api-4u7m.onrender.com'
+// Override opcional (não é segredo): NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://mfa-api-4u7m.onrender.com').replace(/\/+$/, '')
+export const ANALYZE_TIMEOUT_MS = 90_000
+export const WAKING_DELAY_MS = 4_000
 export const SIMULATION_LIMITS = {
   ipca: { min: -5, max: 20, step: 0.01 },
   crescimentoIbcbr: { min: -10, max: 10, step: 0.01 },

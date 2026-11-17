@@ -5,7 +5,8 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'rec
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { AssetDot } from '@/components/asset-dot'
 import { CHART_AXIS_PADDING_RATIO, CHART_AXIS_ZERO_PADDING, CHART_PERIOD_OPTIONS, MACRO_CHARTS, SIMULATION_DEBOUNCE_MS, SIMULATION_LIMITS } from '@/lib/config'
-import { simularCenario } from '@/lib/api'
+import { isAbortError, simularCenario, SimulacaoInvalida } from '@/lib/api'
+import { chaveData, chaveMesesAntes, formatarDataBR, formatarDiaMesBR } from '@/lib/datas'
 import { scenarioTone } from '@/lib/scenario'
 import type { Analise, Classificacao, EntradasSimulacao, PeriodoGrafico, ResultadoSimulacao, SeriePonto } from '@/lib/types'
 
@@ -14,9 +15,8 @@ const priceFormatter = (digits = 2) => new Intl.NumberFormat('pt-BR', { maximumF
 const formatValue = (value?: number | null, digits = 2) => value == null || !Number.isFinite(value) ? empty : priceFormatter(digits).format(value)
 const formatDate = (value?: string | number | null, withYear = false) => {
   if (value == null) return empty
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return new Intl.DateTimeFormat('pt-BR', withYear ? { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' } : { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(parsed)
+  const text = String(value)
+  return (withYear ? formatarDataBR(text) : formatarDiaMesBR(text)) ?? text
 }
 const labels: Record<string, string> = {
   valor: 'Valor', anterior: 'Janela anterior', recente: 'Janela recente',
@@ -33,10 +33,9 @@ function filterByPeriod(points: SeriePonto[] | null | undefined, period: Periodo
   const sorted = points.filter((point): point is SeriePonto & { data: string; valor: number } => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((a, b) => a.data.localeCompare(b.data))
   const months = CHART_PERIOD_OPTIONS.find((option) => option.value === period)?.months
   if (months == null || !sorted.length) return sorted
-  const latest = new Date(`${sorted[sorted.length - 1].data}T00:00:00Z`)
-  const cutoff = new Date(latest)
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - months)
-  return sorted.filter((point) => new Date(`${point.data}T00:00:00Z`) >= cutoff)
+  const cutoff = chaveMesesAntes(sorted[sorted.length - 1].data, months)
+  if (cutoff == null) return sorted
+  return sorted.filter((point) => (chaveData(point.data) ?? 0) >= cutoff)
 }
 
 function ChartCard({ title, points, threshold, referenceLabel, previousWindow, recentWindow, ibcbr = false, seriesColor = 'var(--chart-1)' }: { title: string; points?: SeriePonto[] | null; threshold?: number | null; referenceLabel?: string; previousWindow?: SeriePonto[] | null; recentWindow?: SeriePonto[] | null; ibcbr?: boolean; seriesColor?: string }) {
@@ -52,7 +51,7 @@ function ChartCard({ title, points, threshold, referenceLabel, previousWindow, r
   const valueRange = chartValues.length ? Math.max(...chartValues) - Math.min(...chartValues) : 0
   const axisPadding = valueRange * CHART_AXIS_PADDING_RATIO || CHART_AXIS_ZERO_PADDING
   const isSelic = title === 'Selic efetiva diária'
-  const yDomain: [number, number] = isSelic
+  const yDomain: [number, number] = !chartValues.length ? [0, 1] : isSelic
     ? [Math.round((Math.min(...chartValues) - 0.005) * 1000) / 1000, Math.round((Math.max(...chartValues) + 0.005) * 1000) / 1000]
     : [Math.min(...chartValues) - axisPadding, Math.max(...chartValues) + axisPadding]
   const hasThreshold = threshold != null && Number.isFinite(threshold)
@@ -80,10 +79,9 @@ export function MacroCharts({ data }: { data: Analise }) {
     const ordered = source.filter((point): point is SeriePonto & { data: string; valor: number } => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((left, right) => left.data.localeCompare(right.data))
     const monthCount = CHART_PERIOD_OPTIONS.find((option) => option.value === period)?.months
     if (monthCount == null || !ordered.length) return ordered
-    const newest = new Date(`${ordered[ordered.length - 1].data}T00:00:00Z`)
-    const start = new Date(newest)
-    start.setUTCMonth(start.getUTCMonth() - monthCount)
-    return ordered.filter((point) => new Date(`${point.data}T00:00:00Z`) >= start)
+    const start = chaveMesesAntes(ordered[ordered.length - 1].data, monthCount)
+    if (start == null) return ordered
+    return ordered.filter((point) => (chaveData(point.data) ?? 0) >= start)
   }
   return <section className="charts-section"><div className="section-heading chart-section-heading"><div><span className="eyebrow">SÉRIES HISTÓRICAS</span><h2>Dashboard interativo</h2></div><label className="period-control">Período<select aria-label="Período dos gráficos" value={period} onChange={(event) => setPeriod(event.target.value as PeriodoGrafico)}>{CHART_PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div>
     <div className="macro-chart-grid">{MACRO_CHARTS.map((chart) => <ChartCard key={chart.id} title={chart.title} points={filteredById(chart.id)} ibcbr={chart.id === 'ibcbr_mensal'} previousWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_anterior?.pontos : null} recentWindow={chart.id === 'ibcbr_mensal' ? data.indicadores?.ibcbr?.janela_recente?.pontos : null} threshold={chart.id === 'ipca_12m_mensal' ? data.cenario?.criterios?.limiar_ipca_pct : chart.id === 'selic_efetiva_diaria' ? data.indicadores?.meta_selic_aa?.valor : null} referenceLabel={chart.id === 'selic_efetiva_diaria' ? 'Meta' : 'Limiar'} seriesColor={chart.id === 'ipca_12m_mensal' ? 'var(--chart-5)' : chart.id === 'selic_efetiva_diaria' ? 'var(--chart-2)' : chart.id === 'dolar_diario' ? 'var(--chart-3)' : 'var(--chart-1)'} />)}</div>
@@ -118,11 +116,18 @@ function simulationInputValues(data: Analise, ipca: number, growth: number): Ent
   }
 }
 
+const clamp = (value: number | null | undefined, range: { min: number; max: number }) => value == null || !Number.isFinite(value) ? range.min : Math.min(range.max, Math.max(range.min, value))
+
 export function ScenarioSimulator({ data }: { data: Analise }) {
   const current = data.cenario?.criterios
-  const [ipca, setIpca] = useState(current?.ipca_12m_pct ?? SIMULATION_LIMITS.ipca.min)
-  const [growth, setGrowth] = useState(current?.crescimento_ibcbr_pct ?? SIMULATION_LIMITS.crescimentoIbcbr.min)
+  // Limitação conhecida: criterios.crescimento_ibcbr_pct vem arredondado a 2 casas e o back classifica o valor bruto;
+  // um slider em 0,00 pode classificar diferente do /analyze. Não corrigido de propósito.
+  const initialIpca = clamp(current?.ipca_12m_pct, SIMULATION_LIMITS.ipca)
+  const initialGrowth = clamp(current?.crescimento_ibcbr_pct, SIMULATION_LIMITS.crescimentoIbcbr)
+  const [ipca, setIpca] = useState(initialIpca)
+  const [growth, setGrowth] = useState(initialGrowth)
   const [result, setResult] = useState<ResultadoSimulacao | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
   const [pending, setPending] = useState(false)
   useEffect(() => {
     let active = true
@@ -131,12 +136,16 @@ export function ScenarioSimulator({ data }: { data: Analise }) {
     setPending(true)
     const timeout = window.setTimeout(() => {
       void simularCenario(params).then((value) => {
-        if (active) { setResult(value); setPending(false) }
-      }).catch(() => { if (active) setPending(false) })
+        if (active) { setResult(value); setErrors([]); setPending(false) }
+      }).catch((error) => {
+        if (!active || isAbortError(error)) return
+        setErrors(error instanceof SimulacaoInvalida ? error.mensagens : ['Não foi possível simular agora. Tente de novo.'])
+        setPending(false)
+      })
     }, SIMULATION_DEBOUNCE_MS)
     return () => { active = false; window.clearTimeout(timeout) }
   }, [data, growth, ipca])
-  const restore = () => { setIpca(current?.ipca_12m_pct ?? SIMULATION_LIMITS.ipca.min); setGrowth(current?.crescimento_ibcbr_pct ?? SIMULATION_LIMITS.crescimentoIbcbr.min) }
+  const restore = () => { setIpca(initialIpca); setGrowth(initialGrowth) }
   const changed = Boolean(result?.cenario?.classificacao && data.cenario?.classificacao && result.cenario.classificacao !== data.cenario.classificacao)
   const sliders = [
     { id: 'sim-ipca', label: 'IPCA · 12 meses', value: ipca, set: setIpca, config: SIMULATION_LIMITS.ipca, suffix: '%' },
@@ -144,7 +153,7 @@ export function ScenarioSimulator({ data }: { data: Analise }) {
   ]
   return <section className="panel simulator-panel"><div className="section-heading simulator-heading"><div><span className="eyebrow">EXPERIMENTO LOCAL</span><h2>Simulador “E se”</h2></div><button type="button" className="restore-button" onClick={restore}>Voltar ao atual</button></div>
     <div className="simulator-controls">{sliders.map((slider) => <label className="slider-field" htmlFor={slider.id} key={slider.id}><span className="slider-label"><span>{slider.label}</span><strong>{formatValue(slider.value)}{slider.suffix}</strong></span><input id={slider.id} type="range" min={slider.config.min} max={slider.config.max} step={slider.config.step} value={slider.value} onChange={(event) => slider.set(Number(event.target.value))} aria-valuetext={`${formatValue(slider.value)}${slider.suffix}`} /><span className="slider-bounds"><span>{formatValue(slider.config.min)}{slider.suffix}</span><span>{formatValue(slider.config.max)}{slider.suffix}</span></span></label>)}</div>
-    <div className="simulation-comparison"><ComparisonCard title="Atual" classification={data.cenario?.classificacao} portfolio={data.carteira?.base} preference={data.carteira?.renda_fixa_preferencia} realRate={data.juro_real?.ex_post_pct} /><ComparisonCard title="Simulado" classification={result?.cenario?.classificacao} portfolio={result?.carteira_base} preference={result?.renda_fixa_preferencia} realRate={result?.juro_real_ex_post_pct} changed={changed} /></div>
+    {errors.map((message) => <p className="simulation-status" role="alert" key={message}>{message}</p>)}<div className="simulation-comparison"><ComparisonCard title="Atual" classification={data.cenario?.classificacao} portfolio={data.carteira?.base} preference={data.carteira?.renda_fixa_preferencia} realRate={data.juro_real?.ex_post_pct} /><ComparisonCard title="Simulado" classification={result?.cenario?.classificacao} portfolio={result?.carteira_base} preference={result?.renda_fixa_preferencia} realRate={result?.juro_real_ex_post_pct} changed={changed} /></div>
     {pending && <p className="simulation-status" role="status">Atualizando simulação…</p>}{result?.avisos?.map((warning) => <p className="simulation-status" key={warning}>{warning}</p>)}
     <p className="simulation-note">A simulação aplica a mesma regra do app aos valores que você escolher; não é previsão.</p>
   </section>
