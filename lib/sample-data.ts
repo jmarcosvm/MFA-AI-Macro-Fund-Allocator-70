@@ -1,19 +1,19 @@
 import type { Analise, SeriePonto } from './types'
 
-function dailySeries(endDate: string, length: number, baseline: number, amplitude: number, phase: number): SeriePonto[] {
-  const points: SeriePonto[] = []
+function dailySeries(endDate: string, length: number, baseline: number, amplitude: number, seed: number): SeriePonto[] {
+  const dates: string[] = []
   const cursor = new Date(`${endDate}T00:00:00Z`)
-  while (points.length < length) {
-    const weekday = cursor.getUTCDay()
-    if (weekday !== 0 && weekday !== 6) {
-      const index = length - points.length - 1
-      const wave = Math.sin((index + phase) / 5) * amplitude
-      const finalWave = Math.sin((length - 1 + phase) / 5) * amplitude
-      points.push({ data: cursor.toISOString().slice(0, 10), valor: Number((baseline + wave - finalWave).toFixed(4)) })
-    }
+  while (dates.length < length) {
+    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6) dates.push(cursor.toISOString().slice(0, 10))
     cursor.setUTCDate(cursor.getUTCDate() - 1)
   }
-  return points.reverse()
+  let state = seed >>> 0
+  const random = () => { state = (1664525 * state + 1013904223) >>> 0; return state / 4294967296 }
+  let walk = 0
+  return dates.reverse().map((data, index) => {
+    walk = Math.max(-amplitude, Math.min(amplitude, walk + (random() - 0.5) * amplitude / 2))
+    return { data, valor: Number((baseline + (index === length - 1 ? 0 : walk)).toFixed(4)) }
+  })
 }
 
 const sampleData: Analise = {
@@ -96,8 +96,8 @@ const sampleData: Analise = {
 
 sampleData.series = {
   ...sampleData.series,
-  selic_efetiva_diaria: dailySeries('2026-11-13', 60, 13.65, 0.11, 2),
-  dolar_diario: dailySeries('2026-11-13', 120, 5.6518, 0.07, 1),
+  selic_efetiva_diaria: dailySeries('2026-11-13', 60, 13.65, 0.01, 217),
+  dolar_diario: dailySeries('2026-11-13', 120, 5.6518, 0.148, 931),
 }
 
 export { sampleData }

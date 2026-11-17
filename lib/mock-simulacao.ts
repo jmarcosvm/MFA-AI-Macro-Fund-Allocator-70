@@ -10,11 +10,11 @@ export function mockSimularCenario(params: EntradasSimulacao): ResultadoSimulaca
   }
 
   const inflacaoAcima = params.ipca_12m_pct > limiarInflacao
-  const atividadeFraca = params.crescimento_ibcbr_pct < limiarAtividade
-  const classificacao = inflacaoAcima && atividadeFraca ? 'ESTAGFLACAO' : atividadeFraca ? 'CONTRACAO' : 'EXPANSAO'
+  const atividadeFraca = params.crescimento_ibcbr_pct <= limiarAtividade
+  const classificacao = atividadeFraca && inflacaoAcima ? 'ESTAGFLACAO' : atividadeFraca ? 'CONTRACAO' : 'EXPANSAO'
   const carteiras = {
-    ESTAGFLACAO: { renda_fixa: 0.55, fundos_cambiais: 0.20, renda_variavel: 0.25 },
-    CONTRACAO: { renda_fixa: 0.65, fundos_cambiais: 0.20, renda_variavel: 0.15 },
+    ESTAGFLACAO: { renda_fixa: 0.60, fundos_cambiais: 0.25, renda_variavel: 0.15 },
+    CONTRACAO: { renda_fixa: 0.55, fundos_cambiais: 0.20, renda_variavel: 0.25 },
     EXPANSAO: { renda_fixa: 0.35, fundos_cambiais: 0.10, renda_variavel: 0.55 },
   }
   const preferencia = classificacao === 'EXPANSAO' ? 'PREFIXADA' : 'POSFIXADA'
