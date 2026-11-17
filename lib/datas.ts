@@ -35,6 +35,13 @@ export function formatarMesAnoBR(value?: string | null): string | null {
   return d ? fmtMesAno.format(utc(d)) : null
 }
 
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+/** "abr/26", ou null. */
+export function formatarMesAnoCurtoBR(value?: string | null): string | null {
+  const d = parseDataISO(value)
+  return d ? `${MESES_CURTOS[d.mes - 1]}/${String(d.ano % 100).padStart(2, '0')}` : null
+}
+
 /** Número comparável (aaaammdd) para ordenar/filtrar sem Date. */
 export function chaveData(value?: string | null): number | null {
   const d = parseDataISO(value)
