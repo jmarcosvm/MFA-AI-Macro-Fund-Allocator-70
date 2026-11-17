@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { AssetDot } from '@/components/asset-dot'
 import { CHART_AXIS_PADDING_RATIO, CHART_AXIS_ZERO_PADDING, CHART_PERIOD_OPTIONS, MACRO_CHARTS, SIMULATION_DEBOUNCE_MS, SIMULATION_LIMITS } from '@/lib/config'
 import { simularCenario } from '@/lib/api'
 import { scenarioTone } from '@/lib/scenario'
@@ -91,12 +92,13 @@ export function MacroCharts({ data }: { data: Analise }) {
 
 const allocationKeys = ['renda_fixa', 'fundos_cambiais', 'renda_variavel'] as const
 const allocationNames: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'Renda fixa', fundos_cambiais: 'Fundos cambiais', renda_variavel: 'Renda variável' }
+const allocationColors: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'var(--series-blue, #1D4ED8)', fundos_cambiais: 'var(--chart-2)', renda_variavel: 'var(--chart-3)' }
 const allocationTone = ['fixed', 'currency', 'equity']
 function AllocationBars({ values }: { values?: Record<string, number | null | undefined> | null }) {
   return <div className="simulation-allocations">{allocationKeys.map((key, index) => {
     const fraction = values?.[key]
     const percent = fraction == null || !Number.isFinite(fraction) ? null : Math.max(0, Math.min(100, fraction * 100))
-    return <div className="simulation-allocation" key={key}><span>{allocationNames[key]}</span><div className="bar-track"><div className={`bar-fill ${allocationTone[index]}`} style={{ '--bar-progress': (percent ?? 0) / 100 } as React.CSSProperties} /></div><strong>{fraction == null ? empty : `${formatValue(fraction * 100, 1)}%`}</strong></div>
+    return <div className="simulation-allocation" key={key}><span className="simulation-allocation-name"><AssetDot color={allocationColors[key]} />{allocationNames[key]}</span><div className="bar-track"><div className={`bar-fill ${allocationTone[index]}`} style={{ '--bar-progress': (percent ?? 0) / 100 } as React.CSSProperties} /></div><strong>{fraction == null ? empty : `${formatValue(fraction * 100, 1)}%`}</strong></div>
   })}</div>
 }
 

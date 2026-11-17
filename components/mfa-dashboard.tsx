@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Analise, Indicador } from '@/lib/types'
 import { scenarioTone } from '@/lib/scenario'
 import { ThemeSwitcher } from '@/components/theme-switcher'
+import { AssetDot } from '@/components/asset-dot'
 import { AiQuestionCard, MacroCharts, ScenarioSimulator } from '@/components/mfa-extras'
 
 const dash = '—'
@@ -47,6 +48,7 @@ function WhatChanges({ data }: { data: Analise }) {
 
 const allocationKeys = ['renda_fixa', 'fundos_cambiais', 'renda_variavel'] as const
 const allocationLabels: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'Renda fixa', fundos_cambiais: 'Fundos cambiais', renda_variavel: 'Renda variável' }
+const allocationColors: Record<(typeof allocationKeys)[number], string> = { renda_fixa: 'var(--series-blue, #1D4ED8)', fundos_cambiais: 'var(--chart-2)', renda_variavel: 'var(--chart-3)' }
 function Portfolio({ data }: { data: Analise }) {
   const portfolio = data.carteira
   return <Panel title="Carteira-modelo" eyebrow="ALOCAÇÃO" className="portfolio-panel"><div className="allocation-legend"><span>Ativo</span><span>Base</span><span>Sugerida</span><span>Diferença</span></div>
@@ -54,7 +56,7 @@ function Portfolio({ data }: { data: Analise }) {
       const base = portfolio?.base?.[key], proposed = portfolio?.sugerida?.[key]
       const tones = ['fixed', 'currency', 'equity']
       const difference = base == null || proposed == null ? null : (proposed - base) * 100
-      return <div className="allocation-row" key={key}><span className="allocation-name"><i className={`legend-dot ${tones[index]}`} />{allocationLabels[key]}</span><div className="allocation-value"><div className="bar-track"><div className={`bar-fill ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, base ?? 0)) } as React.CSSProperties} /></div><span>{base == null ? dash : `${number(base * 100, 1)}%`}</span></div><div className="allocation-value"><div className="bar-track"><div className={`bar-fill suggested ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, proposed ?? 0)) } as React.CSSProperties} /></div><span>{proposed == null ? dash : `${number(proposed * 100, 1)}%`}</span></div><span className="allocation-difference">{difference == null ? dash : `${difference > 0 ? '+' : ''}${number(difference, 0)} p.p.`}</span></div>
+      return <div className="allocation-row" key={key}><span className="allocation-name"><AssetDot color={allocationColors[key]} />{allocationLabels[key]}</span><div className="allocation-value"><div className="bar-track"><div className={`bar-fill ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, base ?? 0)) } as React.CSSProperties} /></div><span>{base == null ? dash : `${number(base * 100, 1)}%`}</span></div><div className="allocation-value"><div className="bar-track"><div className={`bar-fill suggested ${tones[index]}`} style={{ '--bar-progress': Math.max(0, Math.min(1, proposed ?? 0)) } as React.CSSProperties} /></div><span>{proposed == null ? dash : `${number(proposed * 100, 1)}%`}</span></div><span className="allocation-difference">{difference == null ? dash : `${difference > 0 ? '+' : ''}${number(difference, 0)} p.p.`}</span></div>
     })}</div><div className="portfolio-meta"><span>Limite de desvio <strong>{portfolio?.limite_desvio_pp == null ? dash : `${number(portfolio.limite_desvio_pp)} p.p.`}</strong></span><span>Preferência em renda fixa <strong>{safeText(portfolio?.renda_fixa_preferencia)}</strong></span></div><p className="didactic-note">O ajuste da carteira é uma ilustração didática.</p></Panel>
 }
 
