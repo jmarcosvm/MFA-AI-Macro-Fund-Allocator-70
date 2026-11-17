@@ -11,6 +11,8 @@ import { AiQuestionCard, MacroCharts, ScenarioSimulator } from '@/components/mfa
 
 const dash = '—'
 const number = (value?: number | null, digits = 2) => value == null || !Number.isFinite(value) ? dash : new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(value)
+// Casas fixas (13 -> "13,00"); `number` corta zeros à direita.
+const numberFixed = (value?: number | null, digits = 2) => value == null || !Number.isFinite(value) ? dash : new Intl.NumberFormat('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)
 const ibcTableFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const ibcTableNumber = (value?: number | null) => value == null || !Number.isFinite(value) ? dash : ibcTableFormatter.format(value)
 const date = (value?: string | null) => formatarDataBR(value) ?? dash
@@ -56,7 +58,7 @@ function Portfolio({ data }: { data: Analise }) {
 
 function RealInterest({ data }: { data: Analise }) {
   const jr = data.juro_real, projection = jr?.entradas_projetado
-  return <Panel title="Juro real" eyebrow="TAXAS"><div className="interest-grid"><article className="interest-card"><div className="interest-top"><span>Ex-post</span><span className="interest-tag">Realizado</span></div><strong>{jr?.ex_post_pct == null ? dash : `${number(jr.ex_post_pct)}%`}</strong><p>Juro real calculado com inflação observada.</p></article><article className="interest-card projected"><div className="interest-top"><span>Projetado · 12 meses</span></div><strong>{jr?.projetado_12m_pct == null ? dash : `${number(jr.projetado_12m_pct)}%`}</strong><p className="projection-label">Projeção do mercado (Focus), não previsão do app</p><div className="projection-details"><span>Reunião<strong>{safeText(projection?.reuniao)}</strong></span><span>Selic esperada<strong>{projection?.selic_esperada_pct == null ? dash : `${number(projection.selic_esperada_pct)}%`}</strong></span><span>IPCA esperado · 12m<strong>{projection?.ipca_esperado_12m_pct == null ? dash : `${number(projection.ipca_esperado_12m_pct, 4)}%`}</strong></span><span>Data Focus<strong>{date(projection?.data_focus)}</strong></span></div></article></div></Panel>
+  return <Panel title="Juro real" eyebrow="TAXAS"><div className="interest-grid"><article className="interest-card"><div className="interest-top"><span>Ex-post</span><span className="interest-tag">Realizado</span></div><strong>{jr?.ex_post_pct == null ? dash : `${number(jr.ex_post_pct)}%`}</strong><p>Juro real calculado com inflação observada.</p></article><article className="interest-card projected"><div className="interest-top"><span>Projetado · 12 meses</span></div><strong>{jr?.projetado_12m_pct == null ? dash : `${number(jr.projetado_12m_pct)}%`}</strong><p className="projection-label">Projeção do mercado (Focus), não previsão do app</p><div className="projection-details"><span>Reunião<strong>{safeText(projection?.reuniao)}</strong></span><span>Selic esperada<strong>{projection?.selic_esperada_pct == null ? dash : `${numberFixed(projection.selic_esperada_pct)}%`}</strong></span><span>IPCA esperado · 12m<strong>{projection?.ipca_esperado_12m_pct == null ? dash : `${number(projection.ipca_esperado_12m_pct, 4)}%`}</strong></span><span>Data Focus<strong>{date(projection?.data_focus)}</strong></span></div></article></div></Panel>
 }
 
 function Indicators({ data }: { data: Analise }) {
