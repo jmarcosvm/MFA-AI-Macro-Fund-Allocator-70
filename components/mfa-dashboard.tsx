@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import type { Analise, Indicador } from '@/lib/types'
+import type { Analise, Indicador, SeriePonto } from '@/lib/types'
 import { scenarioTone } from '@/lib/scenario'
-import { formatarDataBR, formatarMesAnoBR } from '@/lib/datas'
+import { ChevronDown } from 'lucide-react'
+import { formatarDataBR, formatarMesAnoCurtoBR } from '@/lib/datas'
 import { modoExemplo } from '@/lib/api'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { AssetDot } from '@/components/asset-dot'
@@ -17,7 +18,6 @@ const ibcTableFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits
 const ibcTableNumber = (value?: number | null) => value == null || !Number.isFinite(value) ? dash : ibcTableFormatter.format(value)
 const date = (value?: string | null) => formatarDataBR(value) ?? dash
 const safeText = (value?: string | null) => value || dash
-const month = (value?: string | null) => formatarMesAnoBR(value) ?? dash
 
 function Panel({ title, eyebrow, children, className = '' }: { title: string; eyebrow?: string; children: React.ReactNode; className?: string }) {
   return <section className={`panel ${className}`}><div className="panel-heading">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2>{title}</h2></div>{children}</section>
@@ -66,12 +66,29 @@ function Indicators({ data }: { data: Analise }) {
   return <section><div className="section-heading"><span className="eyebrow">DADOS DE MERCADO</span><h2>Indicadores</h2></div><div className="metrics-grid"><IndicatorCard title="Selic efetiva · a.a." data={i?.selic_efetiva_aa} /><IndicatorCard title="Meta da Selic · a.a." data={i?.meta_selic_aa} dateLabel="Vigente em" /><IndicatorCard title="IPCA · 12 meses" data={i?.ipca_12m} /><IndicatorCard title="Dólar · venda" data={i?.dolar_venda} suffix="" /><IndicatorCard title="Volatilidade do dólar · 63 dias, anualizada" data={i?.volatilidade_dolar_63d_anualizada_pct} /></div></section>
 }
 
+const noData = 'Sem dados'
+const ibcAverage = (value?: number | null) => value == null || !Number.isFinite(value) ? noData : number(value, 4)
+const ibcChangeFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4, signDisplay: 'exceptZero' })
+
+function IbcStat({ label, value, tone }: { label: string; value: string; tone?: 'neg' | 'pos' }) {
+  return <div className="ibc-stat" data-tone={tone}><span>{label}</span><strong>{value}</strong></div>
+}
+
+function IbcTable({ title, points }: { title: string; points?: SeriePonto[] | null }) {
+  const rows = (points ?? []).filter((point): point is SeriePonto & { data: string; valor: number } => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((left, right) => left.data.localeCompare(right.data))
+  return <table className="ibc-table"><caption>{title}</caption><thead><tr><th scope="col">Mês</th><th scope="col">Valor</th></tr></thead><tbody>{rows.length ? rows.map((point) => <tr key={point.data}><td>{formatarMesAnoCurtoBR(point.data) ?? dash}</td><td>{ibcTableNumber(point.valor)}</td></tr>) : <tr><td colSpan={2}>{noData}</td></tr>}</tbody></table>
+}
+
 function IbcbrCard({ data }: { data: Analise }) {
   const [open, setOpen] = useState(false)
   const ibc = data.indicadores?.ibcbr, recent = ibc?.janela_recente, previous = ibc?.janela_anterior
   const change = recent?.media == null || previous?.media == null ? null : recent.media - previous.media
-  const points = [...(previous?.pontos ?? []), ...(recent?.pontos ?? [])].filter((point) => typeof point?.data === 'string' && typeof point.valor === 'number' && Number.isFinite(point.valor)).sort((left, right) => (left.data ?? '').localeCompare(right.data ?? ''))
-  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher −' : 'Ver meses +'}</span></button>{open && <div className="ibc-content ibc-table-wrap"><table className="ibc-table"><thead><tr><th>Mês</th><th>Valor</th><th>Janela</th></tr></thead><tbody>{points.length ? points.map((point) => { const isRecent = recent?.pontos?.some((item) => item.data === point.data); return <tr key={point.data}><td>{month(point.data)}</td><td>{ibcTableNumber(point.valor)}</td><td>{isRecent ? 'Recente' : 'Anterior'}</td></tr> }) : <tr><td colSpan={3}>Sem dados</td></tr>}</tbody></table><div className="ibc-summary"><div><span>Média da janela anterior</span><strong>{number(previous?.media, 4)}</strong></div><div><span>Média da janela recente</span><strong>{number(recent?.media, 4)}</strong></div><div className="ibc-change"><span>Variação entre médias</span><strong>{change == null ? dash : number(change, 4)}</strong></div></div></div>}</section>
+  const roundedChange = change == null || !Number.isFinite(change) ? null : Math.round(change * 10000) / 10000
+  const tone = roundedChange == null || roundedChange === 0 ? undefined : roundedChange < 0 ? 'neg' : 'pos'
+  return <section className="panel ibc-panel"><button className="ibc-trigger" type="button" aria-expanded={open} aria-controls="ibc-meses" onClick={() => setOpen(!open)}><span><span className="eyebrow">ATIVIDADE ECONÔMICA</span><strong>IBC-Br</strong><small>{safeText(ibc?.fonte)}</small></span><span className="ibc-expand">{open ? 'Recolher' : 'Ver meses'}<ChevronDown className="ibc-chevron" size={14} aria-hidden="true" /></span></button>
+    <div className="ibc-stats"><IbcStat label="Média da janela anterior" value={ibcAverage(previous?.media)} /><IbcStat label="Média da janela recente" value={ibcAverage(recent?.media)} /><IbcStat label="Variação entre médias" value={roundedChange == null ? noData : ibcChangeFormatter.format(roundedChange)} tone={tone} /></div>
+    <div id="ibc-meses" className="ibc-collapse" data-open={open} inert={!open}><div className="ibc-collapse-inner"><div className="ibc-tables"><IbcTable title="Janela anterior" points={previous?.pontos} /><IbcTable title="Janela recente" points={recent?.pontos} /></div></div></div>
+  </section>
 }
 
 function QualityWarnings({ data }: { data: Analise }) {
