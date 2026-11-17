@@ -60,7 +60,16 @@
 .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .theme-switcher { display:flex; align-items:center; padding:3px; gap:2px; border:1px solid var(--border); border-radius:9px; background:var(--card); }
 .theme-switcher button { border:0; border-radius:6px; padding:6px 9px; background:transparent; color:var(--muted-foreground); font:inherit; font-size:10px; cursor:pointer; }
-.theme-switcher button[aria-pressed="true"] { color:var(--primary-foreground); background:var(--primary); font-weight:700; }
+.theme-switcher { position:relative; }
+.theme-switcher button { position:relative; z-index:1; transition:color .2s ease; }
+.theme-switcher button[aria-checked="true"] { color:var(--primary-foreground); font-weight:700; }
+.theme-switcher:not([data-placed]) button[aria-checked="true"] { background:var(--primary); }
+.theme-pill { position:absolute; z-index:0; top:3px; bottom:3px; left:0; width:var(--pill-w,0px); border-radius:6px; background:var(--primary); transform:translateX(var(--pill-x,0px)); opacity:0; pointer-events:none; }
+.theme-switcher[data-placed] .theme-pill { opacity:1; }
+.theme-switcher[data-ready] .theme-pill { transition:transform .2s ease-out, width .2s ease-out, background-color .2s ease; }
+.theme-switcher button:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+/* Troca de tema suave (~200 ms): body e cards, só enquanto o <html> tem .theme-animating (ligada pelo seletor no clique; na carga não anima, sem flicker). :where() zera a especificidade. Fora: SVG do Recharts. prefers-reduced-motion já zera tudo (regra global mais abaixo). */
+:where(html.theme-animating) :where(body, .panel, .metric-card, .interest-card, .macro-chart-card, .hero-band, .theme-switcher, .panel *:not(svg, svg *), .metric-card *:not(svg, svg *), .interest-card *:not(svg, svg *), .macro-chart-card *:not(svg, svg *), .hero-band *:not(svg, svg *)) { transition:background-color .2s ease, color .2s ease, border-color .2s ease; }
 .charts-section { margin-top:20px; }
 .chart-section-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; }
 .period-control { display:flex; align-items:center; gap:8px; color:var(--muted-foreground); font-size:11px; }
