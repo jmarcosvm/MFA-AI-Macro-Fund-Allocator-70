@@ -8,7 +8,7 @@ A interface foi gerada com o v0 (Vercel) e integrada à API real.
 
 - Interface publicada: <https://mfa-ai-macro-fund-allocator.vercel.app>
 - API (FastAPI): <https://mfa-api-4u7m.onrender.com> — repositório
-  [MFA-AI-macro-fund-allocator](https://github.com/jmarcosvm/MFA-AI-macro-fund-allocator)
+  [MFA-AI-macro-fund-allocator-API](https://github.com/jmarcosvm/MFA-AI-macro-fund-allocator-API)
 
 Consome `GET /api/v1/macro/analyze` (análise) e `GET /api/v1/macro/simulate` (simulador). Todas as regras e números vêm da
 API; o front só exibe e formata.
